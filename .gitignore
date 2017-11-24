@@ -6,5 +6,5 @@
 *.iml
 out
 gen
-build
+build/
 !build/libs
