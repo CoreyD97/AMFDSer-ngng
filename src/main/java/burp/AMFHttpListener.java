@@ -29,35 +29,34 @@ public class AMFHttpListener implements IHttpListener {
 	@Override
 	public void processHttpMessage(int toolFlag, boolean messageIsRequest, IHttpRequestResponse messageInfo)
     {
-        if (toolFlag == IBurpExtenderCallbacks.TOOL_SCANNER || toolFlag == IBurpExtenderCallbacks.TOOL_INTRUDER || toolFlag == IBurpExtenderCallbacks.TOOL_PROXY)
-        {
+        if(messageIsRequest){
+            if(toolFlag == IBurpExtenderCallbacks.TOOL_SCANNER || toolFlag == IBurpExtenderCallbacks.TOOL_INTRUDER || toolFlag == IBurpExtenderCallbacks.TOOL_PROXY){
+                //check to see if it has the magic header
+                if (messageInfo != null && AMFUtils.hasMagicHeader(messageInfo.getRequest(), helpers)) {
 
-            //if it is a request, check to see if it has the magic header
-            if (messageIsRequest && messageInfo != null && AMFUtils.hasMagicHeader(messageInfo.getRequest(), helpers)) {
+                    //if the request has the custom header, remove it
+                    List<String> headers = helpers.analyzeRequest(messageInfo.getRequest()).getHeaders();
+                    headers.remove(AMFUtils.SERIALIZEHEADER);
 
-                //if the request has the custom header, remove it
-                List<String> headers = helpers.analyzeRequest(messageInfo.getRequest()).getHeaders();
-                headers.remove(AMFUtils.SERIALIZEHEADER);
+                    //extract the body
+                    int bodyOffset = helpers.analyzeRequest(messageInfo.getRequest()).getBodyOffset();
+                    byte[] request = messageInfo.getRequest();
+                    int bodyLength = request.length - bodyOffset;
 
-                //extract the body
-                int bodyOffset = helpers.analyzeRequest(messageInfo.getRequest()).getBodyOffset();
-                byte[] request = messageInfo.getRequest();
-                int bodyLength = request.length - bodyOffset;
+                    byte[] body = new byte[bodyLength];
+                    System.arraycopy(request, bodyOffset, body, 0, bodyLength);
 
-                byte[] body = new byte[bodyLength];
-                System.arraycopy(request, bodyOffset, body, 0, bodyLength);
+                    //convert it back to a serialized object and create an http message (without the magic header)
+                    byte[] newHTTPMessage = helpers.buildHttpMessage(headers, AMFUtils.fromXML(body, helpers));
+                    //System.out.println(helpers.bytesToString(newHTTPMessage));
 
-                //convert it back to a serialized object and create an http message (without the magic header)
-                byte[] newHTTPMessage = helpers.buildHttpMessage(headers, AMFUtils.fromXML(body, helpers));
-                //System.out.println(helpers.bytesToString(newHTTPMessage));
-
-                //update the current message to this one
-                messageInfo.setRequest(newHTTPMessage);
+                    //update the current message to this one
+                    messageInfo.setRequest(newHTTPMessage);
+                }
             }
-
+        }else{
             //if it is a response, and looks like java, and comes from the scanner convert it to XML so that stack traces and error messages, etc. can be picked up on)
-            else if (toolFlag == IBurpExtenderCallbacks.TOOL_SCANNER && AMFUtils.isAMF(messageInfo.getResponse(), helpers))
-            {
+            if(AMFUtils.isAMF(messageInfo.getResponse(), helpers)) {
                 try {
                     byte[] XML = AMFUtils.toXML(messageInfo.getResponse(), helpers);
                     List<String> headers = helpers.analyzeRequest(messageInfo.getResponse()).getHeaders();
